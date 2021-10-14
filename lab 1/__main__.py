@@ -77,7 +77,7 @@ def __main__():
     x[0] = -1
 
     for i in range(40):
-        x1[i] = round(random.uniform(-1, 1),5)
+        x1[i] = round(random.uniform(0, 2),5)
         x2[i] = round(random.uniform(-1, 1),5)
     # for i in range(39):
         # x[i+1] = x[i] + 2/40

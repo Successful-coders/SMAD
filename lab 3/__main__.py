@@ -3,12 +3,16 @@ import random
 import matplotlib.pyplot as plot
 from numpy import linalg as LA, sqrt
 import scipy.stats
-from requests_html import HTMLSession
 import pandas as pd
+from scipy.stats import t as Student
+import csv
+
+Fs = Student.ppf(1 - 0.05/2, 35) 
 
 def u(x1, x2, teta):
-    f = np.zeros(4)
-    f = [1, 1/x1, x2 ** 2, x1*x2, x1 / x2]
+    x1 = np.array(x1)
+    x2 = np.array(x2)
+    f = [1, 1 / x1, x2**2, x1*x2, x2 / x1]
     nu = np.dot(teta, f)
     return nu
 
@@ -21,7 +25,7 @@ def calc_w(u):
     m = calc_m(u, len(u))
     u_sr = 0
     for res in u:
-        u_sr += (res - m) ** 2
+        u_sr += (res - m)**2
     return u_sr/(len(u) - 1)
 
 def calc_m(u, n):
@@ -56,7 +60,7 @@ def mnk(x1, x2, y, n):
     cx = np.zeros((len(x1), n))
     cx[:, 0] = 1
     cx[:, 1] = 1/x1
-    cx[:, 2] = x2 **2
+    cx[:, 2] = x2**2
     cx[:, 3] = x1 * x2
     cx[:, 4] = x1 / x2
     cy = np.copy(y)
@@ -85,21 +89,22 @@ def create_dov_int(cx, F, teta, sigma_kv, djj):
 def calc_neznach_hipot_param(teta, djj, sigma):
     F = []
     for i in range(len(teta)):
-        F.append((teta[i]) ** 2 / (sigma * djj[i]))
+        F.append((teta[i])**2 / (sigma * djj[i]))
     return F
 
-def calc_RSS(sigma, n, m):
-    rss = (n-m) * sigma
+def calc_RSS(x, y, teta):
+    rss = np.dot(np.transpose(y - np.dot(x, teta)), y - np.dot(x, teta))
     return rss
 
 def calc_RSSH(x, y, teta):
-    rssh = np.dot(np.transpose(y - np.dot(x, teta)), y - np.dot(x, teta))
+    rssh = 0
+    for i in range(len(y)): 
+        rssh += (y[i] - np.average(y))**2
     return rssh
 
-def calc_zn_hip(rss, rssh, n, m, q):
-    F = ((rssh - rss) / q) / (rss / (n - m))
+def calc_zn_hip(rss, rssh, n, m):
+    F = ((rssh - rss) / (m-1)) / (rss / (n-m))
     return F
-
 
 def create_table(df):
     fig, ax = plot.subplots()
@@ -111,30 +116,72 @@ def create_table(df):
     table.set_fontsize(8)
     fig.tight_layout()
 
-def __main__():
+def read_value():
+    with open('/Users/voronik/Desktop/UNIVERSITY/7 семестр/СМАД/SMAD/results.csv', 'r') as csv_file:
+        csv_reader = csv.reader(csv_file, delimiter='\t')
+        dataForAnalys = np.array(list(csv_reader))
+        np.delete(dataForAnalys, (0), axis=0)
+        x1 = dataForAnalys[:, 0]
+        x1 = np.array([float(x) for x in x1])
+        x2 = dataForAnalys[:, 1]
+        x2 = np.array([float(x) for x in x2])
+        y = dataForAnalys[:, 3]
+        y = np.array([float(y) for y in y])
+        e = dataForAnalys[:, 4]
+        e = np.array([float(e) for e in e])
+        return x1, x2, e, y
+
+f = lambda x1, x2: [1, 1/x1, x2**2, x1*x2, x1 **2]
+
+def calc_M_dov(u_oz, x, y, x1, x2, sigma, sigma_kv, teta):
+    x1 = np.sort(x1)
+    x2 = np.sort(x2)
+    M_verh = []
+    M_nizh = []
+    otkl_nizh = []
+    otkl_verh = []
+    u_dov = u(x1, x2, teta)
+    y, e = calc_y(u_dov)
+    for i in range(len(u_oz)): 
+        X = LA.inv(np.dot(x.T, x))
+        fx = np.array(f(x1[i], 0))
+        # fx = np.array(f(0, x2[i]))
+        vkl1 = np.matmul(fx.transpose(), X)
+        vkl2 = vkl1@fx.T
+        vkl = sigma * np.sqrt(vkl2)
+        M_nizh.append(u_dov[i] - (Fs * vkl))
+        M_verh.append(u_dov[i] + (Fs * vkl))
+
+        vkl_otkl = sigma_kv * (1 + vkl2)
+        otkl_nizh.append(u_dov[i] - (Fs * vkl_otkl))
+        otkl_verh.append(u_dov[i] + (Fs * vkl_otkl))
+
+    return M_verh, M_nizh, otkl_verh, otkl_nizh, u_dov, y
+
+def create_plot(data1, data2, data3, x):
+    fig, ax = plot.subplots()
+    ax.set_title("Мат жидание")
+    ax.plot(x, data1, label='Верхнее значение')
+    ax.plot(x, data2, label='Теоретическое')
+    ax.plot(x, data3, label='Нижнее значение')
+    ax.set_ylabel("у")
+    ax.set_xlabel("х")
+    ax.legend()
+
+    fig.set_figheight(5)
+    fig.set_figwidth(16)
+    plot.show()
+    plot.show()
+    
+
+
+def main():
     teta = [0.3, 0.14, 0.432, 3, 0.00001]
     n = 40
-    x1 = np.zeros(n)
-    x2 = np.zeros(n)
-
-    x1 = np.array([ 0.32390023, -0.34725259,  0.78381968, -0.24713599, -0.92583476, -0.76140316,
-            0.78438351,  0.06926699, -0.19419177, -0.20446248,  0.36498275,  0.6430685,
-            -0.69000552,  0.53620227, -0.36596288,  0.09916682,  0.69863079, -0.77057757,
-            0.62452704, -0.38963251, -0.36289536,  0.70176654,  0.76653001, -0.8264534,
-            -0.46460932,  0.71063226,  0.23511767, -0.71029019, 0.02145435, 0.38076295,
-            0.10906815, -0.68266406,  0.12610703,  0.89168848,  0.79420493, -0.1765881,
-            0.24414797,  0.84046955,  0.45996973,  0.8613737 ])
-    x2 = np.array([-0.69762794,  0.66021212,  0.65267716, -0.24793652, -0.26103093, -0.02192529,
-            0.49963626, -0.82567682, -0.24142269, -0.66004223,  0.05343135,  0.8917568,
-            0.68045318,  0.11433146, -0.08409676,  0.02706899, -0.87425862,  0.5083733,
-            -0.96566545, -0.38398395, -0.9093806,   0.68809117,  0.74604826, -0.15810338,
-            0.14329951,  0.83901296,  0.13880737,  0.81852986, -0.94341511,  0.60822667,
-            -0.0312237,  -0.50614177,  0.08375906,  0.85850998,  0.19358785,  0.42399955,
-            0.43474397,  0.78668444,  0.93962503,  0.49517424])
+    x1, x2, e, y = read_value()
     U = np.zeros(40)
     U = u(x1, x2, teta)
 
-    y, e = calc_y(U)
     mnk_teta, cx = mnk(x1, x2, y, 5)
     e_oz = y - np.dot(cx, mnk_teta)
     y_oz = np.dot(cx, mnk_teta)
@@ -145,40 +192,55 @@ def __main__():
     print ('sigma=', sigma)
     F = sigma_kv/sigma
 
+    # Доверительный интервал
     Ft = scipy.stats.t.ppf(0.95, 36)
     djj = calc_djj(cx)
     D_verh, D_nizh = create_dov_int(cx, Ft, mnk_teta, sigma_kv, djj)
-
-    F_zn_param = calc_neznach_hipot_param(mnk_teta, djj, sigma_kv)
-    temp = []
-    Fnm = scipy.stats.f.ppf(1-0.05, 1, 35)
-    for i in range(len(mnk_teta)):
-        if(F_zn_param[i] < Fnm):
-            temp.append('+')
-        else:
-            temp.append('-')
-    
-    # rss = calc_RSS(sigma_kv, n, len(teta))
-    # rssh = calc_RSSH(cx, y, teta) 
-    # F_zn_hip = calc_zn_hip(rss, rssh)
-
     df = pd.DataFrame()
-    df['j'] = np.arange(len(teta))
     df['Верхнее значение'] = D_verh
     df['Нижнее значение'] = D_nizh
     df['Тетта задаваемое'] = teta
     df['Оценка тетта'] = mnk_teta
 
+# Вычисление гипотезы о незначимости параметров
+    F_zn_param = calc_neznach_hipot_param(mnk_teta, djj, sigma_kv)
+    temp = []
+    F_fish = scipy.stats.f.ppf(1-0.05/2, 1, 35)
+    for i in range(len(mnk_teta)):
+        if(F_zn_param[i] < F_fish):
+            temp.append('+')
+        else:
+            temp.append('-')
     df1 = pd.DataFrame()
     df1['F'] = F_zn_param
     df1['Отверг'] = temp
 
-    create_table(df1)
+    # Вычисление гипотезы о незначимости гипотезы 
+    temp1 = []
+    rss = calc_RSS(cx, y, teta)
+    rssh = calc_RSSH(cx, y, teta) 
+    F_zn_hip = calc_zn_hip(rss, rssh, n, len(teta))
+    if F_zn_hip < F_fish: 
+        temp1.append('+')
+    else: 
+        temp1.append('-')
+    df2 = pd.DataFrame()
+    df2['F'] = F_zn_hip
+    df2['F Fishera'] = F_fish
+    df2['Отверг'] = temp1
 
+    # Вычисление дов интервала мат ожиадния
+    u_M = u(x1, x2, mnk_teta)
+    M_teir = u(x1, x2, teta)
+    M_verh, M_nizh, otkl_ver, otkl_nizh, u_dov, y = calc_M_dov(u_M, cx, y, x1, x2, sigma, sigma_kv, teta)
+
+    # create_table(df2)
+    create_plot(M_verh, u_dov, M_nizh, np.sort(x1))
+    create_plot(otkl_ver, u_dov, otkl_nizh, np.sort(x1))
 
     print('teta oz = ', mnk_teta)
     print('F = ', F )
     print('Ft = ', Ft)
     plot.show()
 
-__main__()
+main()
