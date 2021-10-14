@@ -6,6 +6,7 @@ import scipy.stats
 import pandas as pd
 from scipy.stats import t as Student
 import csv
+from scipy.stats import f as Fisher
 
 Fs = Student.ppf(1 - 0.05/2, 35) 
 
@@ -117,7 +118,7 @@ def create_table(df):
     fig.tight_layout()
 
 def read_value():
-    with open('/Users/voronik/Desktop/UNIVERSITY/7 семестр/СМАД/SMAD/results.csv', 'r') as csv_file:
+    with open('results.csv', 'r') as csv_file:
         csv_reader = csv.reader(csv_file, delimiter='\t')
         dataForAnalys = np.array(list(csv_reader))
         np.delete(dataForAnalys, (0), axis=0)
@@ -144,8 +145,8 @@ def calc_M_dov(u_oz, x, y, x1, x2, sigma, sigma_kv, teta):
     y, e = calc_y(u_dov)
     for i in range(len(u_oz)): 
         X = LA.inv(np.dot(x.T, x))
-        fx = np.array(f(x1[i], 0))
-        # fx = np.array(f(0, x2[i]))
+        # fx = np.array(f(x1[i], 0))
+        fx = np.array(f(1, x2[i]))
         vkl1 = np.matmul(fx.transpose(), X)
         vkl2 = vkl1@fx.T
         vkl = sigma * np.sqrt(vkl2)
@@ -160,20 +161,20 @@ def calc_M_dov(u_oz, x, y, x1, x2, sigma, sigma_kv, teta):
 
 def create_plot(data1, data2, data3, x):
     fig, ax = plot.subplots()
-    ax.set_title("Мат жидание")
-    ax.plot(x, data1, label='Верхнее значение')
-    ax.plot(x, data2, label='Теоретическое')
-    ax.plot(x, data3, label='Нижнее значение')
+    ax.set_title("Доверительный интервал для математичсекого ожидания.")
+    # ax.set_title("Доверительный интервал для отклика.")
+    ax.plot(x, data1, label='Левая граница')
+    ax.plot(x, data2, label='Теоретическое значение')
+    ax.plot(x, data3, label='Правая граница')
     ax.set_ylabel("у")
     ax.set_xlabel("х")
     ax.legend()
+    ax.grid()
 
     fig.set_figheight(5)
     fig.set_figwidth(16)
     plot.show()
     plot.show()
-    
-
 
 def main():
     teta = [0.3, 0.14, 0.432, 3, 0.00001]
@@ -208,37 +209,49 @@ def main():
     F_fish = scipy.stats.f.ppf(1-0.05/2, 1, 35)
     for i in range(len(mnk_teta)):
         if(F_zn_param[i] < F_fish):
-            temp.append('+')
-        else:
-            temp.append('-')
+            temp.append('Не отвергается')
+        else: 
+            temp.append('Отвергается')
     df1 = pd.DataFrame()
     df1['F'] = F_zn_param
+    df1['Оценка параметра'] = mnk_teta
     df1['Отверг'] = temp
+    print(F_fish)
 
     # Вычисление гипотезы о незначимости гипотезы 
     temp1 = []
     rss = calc_RSS(cx, y, teta)
-    rssh = calc_RSSH(cx, y, teta) 
+    rssh = calc_RSSH(cx, y, teta)
+    print('rss=', rss) 
+    print('rssh=', rssh) 
     F_zn_hip = calc_zn_hip(rss, rssh, n, len(teta))
+    print('F_zn_hip=', F_zn_hip)
+    F_fish = Fisher.ppf(1-0.05/2, 1, 35)
+    print('F_fish=', F_fish)
     if F_zn_hip < F_fish: 
-        temp1.append('+')
+        temp1.append('Не отвергается')
     else: 
-        temp1.append('-')
+        temp1.append('Отвергается')
     df2 = pd.DataFrame()
-    df2['F'] = F_zn_hip
-    df2['F Fishera'] = F_fish
-    df2['Отверг'] = temp1
+    df2['F'] = pd.Series(F_zn_hip)
+    df2['Квантиль F распределения'] = F_fish
+    df2['Гипотеза'] = temp1
 
     # Вычисление дов интервала мат ожиадния
     u_M = u(x1, x2, mnk_teta)
     M_teir = u(x1, x2, teta)
     M_verh, M_nizh, otkl_ver, otkl_nizh, u_dov, y = calc_M_dov(u_M, cx, y, x1, x2, sigma, sigma_kv, teta)
 
+    # create_table(df)
+    # create_table(df1)
     # create_table(df2)
-    create_plot(M_verh, u_dov, M_nizh, np.sort(x1))
-    create_plot(otkl_ver, u_dov, otkl_nizh, np.sort(x1))
+    # create_plot(M_nizh, u_dov, M_verh, np.sort(x1))
+    # create_plot(otkl_nizh, u_dov, otkl_ver, np.sort(x1))
 
-    print('teta oz = ', mnk_teta)
+    create_plot(M_nizh, u_dov, M_verh, np.sort(x2))
+    # create_plot(otkl_nizh, u_dov, otkl_ver, np.sort(x2))
+
+    print('teta oz = ', np.round(mnk_teta, 5))
     print('F = ', F )
     print('Ft = ', Ft)
     plot.show()
