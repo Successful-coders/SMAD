@@ -1,175 +1,254 @@
 import random
 import numpy  
 from math import *
-
 N = 300
+import matplotlib.pyplot as plt
 
-trueTetha = [3, 2, 0.001, 4, 0.0015, 3, 0.002, 4, 2]
-def u(x1,x2,x3):
-    return trueTetha[0]*1 + trueTetha[1]*x1 + trueTetha[2]*x1**2 + trueTetha[3]*x2 + trueTetha[4]*x2**2 + trueTetha[5]*x3 + trueTetha[6]*x3**2 + trueTetha[7]*x1*x2 + trueTetha[8]*x1*x3 
+def u(x1,x2,x3,x4,x5,x6,x7,x8, x9):
+    return 1 + x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9
 
-def dispers(x1,x2,x3):
-    return 0.05+0.01*abs(u(x1,x2,x3))
-
-def findMx(reses):
-    Mx = 0
-    for i in reses:
+def fMx(res):
+    Mx=0
+    for i in res:
         Mx += i
-    Mx /= len(reses)
+    Mx /= len(res)
     return Mx
-
-def makeOmega(X, func, alpha = 1):
-#     Функция создания матрицы Омега большое, Х - матрица наблюдений (1 - первый фактор, 3 - второй, 5 - третий)
-    Omega = numpy.zeros((X.shape[0], X.shape[0]))
-    for i in range(X.shape[0]):
-        Omega[i,i] = 1/(func(X[i,1],X[i,3],X[i,5])*alpha)
-    return Omega
-
-def MNK(X, Y, func = lambda x1,x2,x3 : 1, alpha = 1):
+ 
     
-    #    Обобщенный МНК
-    #    Х - матрица наблюдений
-    #    Y - матрица откликов, соответствующая Х
-    #    func - функция h (дефолт - 1, дисперсия - константа)
+def fDx(res):
+     Dx = 0
+     Mx = fMx(res)
+     for i in res:
+         Dx += (i - Mx)**2
+     Dx = Dx / (len(res) - 1)
+     return Dx
+
+
+# Максимальная сопряженность, максимальная парная сопряженность
+def matR(X):
+    n = len(X)
+    m = len(X[0])
+    R = numpy.eye(m)
+    Xx = [0]*m
+    for i in range(m):
+        for j in range(n):
+            Xx[i] += X[j][i]**2 
+    for i in range(m-1):
+        for j in range(i+1, m):
+            for k in range(n):
+                R[i,j] += X[k][i] * X[k][j] / sqrt(Xx[i]*Xx[j])
+                R[j,i] = R[i,j]
+
+    maxij = 0
+    for i in range(R.shape[0]):
+        for j in range(R.shape[1]):
+            if (i == j): continue
+            if (maxij < R[i,j]):
+                maxij = R[i,j]
+    print("Max(Rij) = ", round(maxij,5)) 
+    Rstar = numpy.transpose(R)
+    Rstarinv = numpy.linalg.inv(Rstar)
+    Rt = []
+    for i in range(R.shape[0]):
+        Rt.append(sqrt(1 - 1/(Rstarinv[i,i])))
     
-    Omega = makeOmega(X, func, alpha)
+    print("Max |Ri| = ", round(max(Rt),5))
+ 
+def MNK(X,lam,y):
     Xt = numpy.transpose(X)
-    skobka= numpy.dot(Xt,Omega)
-    skobka = numpy.dot(skobka,X)
-    skobka = numpy.linalg.matrix_power(skobka, -1)
-    skobka = numpy.dot(skobka,Xt)
-    skobka = numpy.dot(skobka,Omega)
-    tetha = numpy.dot(skobka, Y)
+    XtX = numpy.dot(Xt,X)
+    tetha = numpy.linalg.inv(numpy.add(XtX, lam))
+    tetha = numpy.dot(tetha, Xt)
+    tetha = numpy.dot(tetha, y)
     return tetha
 
+def makeRidge(X,Y, eigvals, lam):
+    l = eigvals
+    XtX = numpy.dot(numpy.transpose(X),X)
+    LAMBDA = numpy.zeros((len(l),len(l)))
+    for q in range(len(l)):
+       LAMBDA[q,q] = lam * XtX[q,q]
+    tetha = MNK(X, LAMBDA, Y)
+    RSS = Y - numpy.dot(X,tetha)
+    RSS = numpy.dot(numpy.transpose(RSS), RSS)
+    return tetha,RSS
+        
+def plotRidge(X,Y, eigvals):
+    fig, sbplt = plt.subplots(2, figsize =(5,5))
+    x = numpy.arange(0, 0.03, 0.0001)
+    y = []
+    yy = []
+    for i in x:
+        #Построим матрицу LAMBDA
+        tetha,RSS = makeRidge(X,Y, eigvals, i)
+        y.append(RSS)
+        yy.append(numpy.linalg.norm(tetha)**2)
+    sbplt[0].plot(x,y)
+    sbplt[1].plot(x,yy)    
+    
+    
+def findMinEigIndex(vec):
+    minIndex = 0
+    value = vec[0]
+    for i in range (1,len(vec)):
+        if (value > vec[i]):
+            minIndex = i
+            value = vec[i]
+    return minIndex
+
+def MGK(X,Y, numberOfEigsToDelete):
+#переход к центрированным оценкам
+    yavg = sum(Y)/len(Y)
+    Ynew = Y
+    for i in range(len(Y)):
+        Ynew[i] = Ynew[i] - yavg
+        
+        
+    Xnew = X
+    for i in range(X.shape[1]):
+        xavg = sum(X[:,i])/X.shape[0]
+        for k in range(X.shape[0]):
+            Xnew[k,i] = Xnew[k,i] - xavg
+            
+            
+    XtXzvezd = numpy.dot(numpy.transpose(Xnew), Xnew)
+    eigVals, V = numpy.linalg.eig(XtXzvezd)
+    Z = numpy.dot(Xnew,V)
+    #eigVals = numpy.linalg.eig(XtXzvezd)[0]
+    Zr = Z
+    Vr = V
+    print("С.З - ", eigVals)
+    for i in range(numberOfEigsToDelete):
+        indexToDelete = findMinEigIndex(eigVals)
+        Zr = numpy.delete(Zr, indexToDelete,1)
+        Vr = numpy.delete(Vr, indexToDelete,1)
+        eigVals = numpy.delete(eigVals, indexToDelete, 0)
+        
+    b = numpy.dot(numpy.transpose(Zr),Zr)
+    b = numpy.linalg.inv(b)    
+    b = numpy.dot(b, numpy.transpose(Zr))
+    b = numpy.dot(b, Ynew)
+    tetha = numpy.dot(Vr, b)
+    
+    RSS = Y - numpy.dot(X,tetha)
+    RSS = numpy.dot(numpy.transpose(RSS), RSS)   
+    return tetha,RSS
+
+    
 #     Генерация точек 
 
 random.seed(1)
-results = []
+U = []
+X1 = []
+X2 = []
+X3 = []
+X4 = []
+X5 = []
+X6 = []
+X7 = []
+X8 = []
+X9 = []
 for i in range (N):
     x1 = round(random.uniform(-1,1),3)
     x2 = round(random.uniform(-1,1),3)
     x3 = round(random.uniform(-1,1),3)
-    res = round(u(x1,x2,x3),3)
-    results.append([x1,x2,x3,res])
- 
-#    Генерация шума для каждого значения 
-for i in range(len(results)):
-    shum = numpy.random.normal(0,dispers(results[i][0], results[i][1], results[i][2])**(1/2))
-    results[i].append(round(shum,3))
-    results[i].append(round(results[i][3] + results[i][4],3))
+    x4 = round(random.uniform(-1,1),3)
+    x5 = round(random.uniform(-1,1),3)
+    x6 = round(random.uniform(-1,1),3)
+    x7 = round(random.uniform(-1,1),3)
+    x8 = round(random.uniform(-1,1),3)
+    x9 = round(2*x1*x2 *x5 + x6 *10*x3 *x4 + numpy.random.normal(0,0.1),3)
+    res = round(u(x1,x2,x3,x4,x5,x6,x7,x8, x9),3)
+    X1.append(x1)
+    X2.append(x2)
+    X3.append(x3)
+    X4.append(x4)
+    X5.append(x5)
+    X6.append(x6)
+    X7.append(x7)
+    X8.append(x8)
+    X9.append(x9)
+    U.append(res)
     
-
+    
  
-#    Тест №1 - Бреуша-Пагана 
-# Создаем матрицы регрессоров, а также вектор откликов
-X = numpy.array([0,0,0,0,0,0,0,0,0])
+#Получение значений шума е и зашумленного значения функции у
+y=[] 
+e=[]   
+w2 = fDx(U)     
+sigma = sqrt(0.05*(w2))
+for i in range(len(U)):
+    e.append(round(numpy.random.normal(0, sigma),5))
+    y.append(round((U[i] + e[i]),5))
+    
+    #запись в файл результатов генерирования
+f = open("results.txt", 'w')
+for i in range(len(y)):
+    res = ''
+    res += '('+ str(X1[i]) + ', ' + str(X2[i]) + ', ' + str(X3[i]) +', ' + str(X4[i]) + ', ' + str(X5[i]) + ', ' + str(X6[i]) + ', ' + str(X7[i]) + ', ' + str(X8[i]) +'); '
+    res += str(U[i]) + '; ' + str(e[i]) + '; ' + str(y[i]) 
+    res += '\n'
+    f.write(res)
+f.close()
+
+#Матрицы регрессоров и  вектор откликов
+X = numpy.array([0,0,0,0,0,0,0,0,0,0])
 Y = []
-for i in range(len(results)):
-    x1 = results[i][0]
-    x2 = results[i][1]
-    x3 = results[i][2]
-    newrow = [1,x1,x1**2, x2, x2**2, x3, x3**2, x1*x2, x1*x3]    
+for i in range(len(X1)):
+    x1 = X1[i]
+    x2 = X2[i]
+    x3 = X3[i]
+    x4 = X4[i]
+    x5 = X5[i]
+    x6 = X6[i]
+    x7 = X7[i]
+    x8 = X8[i]
+    x9 = X9[i]
+    newrow = [1,x1,x2, x3, x4, x5, x6, x7, x8, x9]    
     X = numpy.vstack([X, newrow])
-    Y.append(results[i][5])
+    Y.append(y[i])
+    
+    
 X = numpy.delete(X, 0, axis = 0)
 
-#    Оценивание параметров tetha через обыкновенный МНК
-tetha = MNK(X,Y)
-print('Вектор параметров tetha для всей выборки - ', tetha)
-d2 = 0
-for i in range(len(tetha)):
-    d2 += (tetha[i] - trueTetha[i])**2
-print("Расстояние tetha  - ", d2)
-e = numpy.subtract(Y,numpy.dot(X,tetha))
-sigmaTheoretical = (numpy.dot(numpy.transpose(e), e)) / (N)
-print("Сигма оценочная - ",sigmaTheoretical)
-c = (e*e)/sigmaTheoretical
+# Определитель матрицы ХтХ
 
-Z = numpy.array([0,0])
-for i in range(len(results)):
-    x1 = results[i][0]
-    x2 = results[i][1]
-    x3 = results[i][2]
-    newrow = [1, dispers(x1,x2,x3)]    
-    Z = numpy.vstack([Z, newrow])
-Z = numpy.delete(Z, 0, axis = 0) 
+Xt = numpy.transpose(X)
+XtX = numpy.dot(Xt,X)
+tr = numpy.trace(XtX)
+    
+    
+print("Определитель матрицы ХтХ ",numpy.linalg.det(XtX))
+print("Определитель матрицы ХтХ/trХтХ ",numpy.linalg.det(numpy.divide(XtX, tr)) )    
 
+# Минимальное собственное число матрицы ХтХ
 
-#    Оценивание параметров alpha через обыкновенный МНК (XtX)-1*Xt*Y
-Zt = numpy.transpose(Z)
-skobka = numpy.dot(Zt,Z)
-skobka = numpy.linalg.matrix_power(skobka, -1)
-skobka = numpy.dot(skobka,Zt)
-resZ = numpy.dot(skobka, c)
-print('Вектор параметров alpha - ',resZ) 
+w = numpy.linalg.eigvals(XtX)
+print("Минимальное собственное значение матрицы ХтХ ",min(w))
+wtr = numpy.linalg.eigvals(numpy.divide(XtX, tr))
+print("Минимальное собственное значение матрицы ХтХ/trХтХ ",min(wtr))
 
- 
-#    Подсчет ESS, сравнение с критической статистикой
-resZ = numpy.delete(resZ,0,0) # удаляем свободный член
-Z = numpy.delete(Z,0,1) # здесь также удаляем свободный член
-cc = numpy.dot(resZ, numpy.transpose(Z))
-ESS = 0
-avg = findMx(c)
-for i in range(len(c)):
-    ESS += (cc[i] - avg)**2
-print(ESS/2," ? ",  3.84)
+# Отношение max/min
 
-#    Тест №2 - Голдфельда-Квандтона
-#    Упорядочим матрицу наблюдений по величине модуля суммы двух факторов
-
-XwDisp = numpy.array(X)
-results = numpy.array(results)
-tmp = results[:,3]
-tmp = numpy.reshape(tmp,(N,1))
-XwDisp = numpy.append(XwDisp, tmp, axis=1)
-
-tmp = results[:,5]
-tmp = numpy.reshape(tmp,(N,1))
-XwDisp = numpy.append(XwDisp, tmp, axis=1) 
-
-Xsorted = numpy.array(sorted(XwDisp, key=lambda a: abs(u(a[1],a[3],a[5]))))
-nc = int(N/3)
-X1 = Xsorted[:nc]
-X2 = Xsorted[2*nc:]
-tetha = MNK(X1[:,:9], X1[:,10])
-print('Вектор параметров tetha X1 - ',tetha)
-e1 = X1[:,9] - numpy.dot(X1[:,:9],tetha)
-d2 = 0
-for i in range(len(tetha)):
-    d2 += (tetha[i] - trueTetha[i])**2
-print("Расстояние X1 - ", d2)
-
-tetha = MNK(X2[:,:9], X2[:,10])
-print('Вектор параметров tetha X2 - ',tetha)
-e2 = X2[:,9] - numpy.dot(X2[:,:9],tetha)
-d2 = 0
-for i in range(len(tetha)):
-    d2 += (tetha[i] - trueTetha[i])**2
-print("Расстояние X2 - ", d2)
-
-print("RSS2/RSS1 = ",(numpy.dot(numpy.transpose(e2), e2))/(numpy.dot(numpy.transpose(e1), e1)))
+print("max/min матрицы ХтХ", max(w)/min(w))
 
 
-tetha = MNK(X1[:,:9],X1[:,10],dispers, resZ)
-print('Вектор параметров tetha X1 (корр.) - ',tetha)
-d2 = 0
-for i in range(len(tetha)):
-    d2 += (tetha[i] - trueTetha[i])**2
-print("Расстояние X1 (корр. - ", d2)
+# Cопряженные и попарно сопряженные
 
-tetha = MNK(X2[:,:9], X2[:,10],dispers, resZ)
-print('Вектор параметров tetha X2 (корр.) - ',tetha)
-d2 = 0
-for i in range(len(tetha)):
-    d2 += (tetha[i] - trueTetha[i])**2
-print("Расстояние X2 (корр.) - ", d2)
+matR(X)
 
-#   Обобщенный МНК
+# Ридж-оценки
 
-tetha = MNK(X, Y,dispers, resZ)
-print('Вектор параметров tetha (корр.) - ',tetha)
-d2 = 0
-for i in range(len(tetha)):
-    d2 += (tetha[i] - trueTetha[i])**2
-print("Расстояние общей выборки - ", d2)
+plotRidge(X, y, w)
+lam = .003  
+tetha,RSS = makeRidge(X, y, w, lam)
+print("Вектор tetha от ридж-оценок с lambda =", lam," -", tetha)
+print("RSS от ридж-оценок -", round(RSS,3))
+print("Норма вектора tetha =", round(numpy.linalg.norm([1,1,1,1,1,1,1,1,1,1] - tetha),3))
+
+#Метод главных компонент
+
+tetha,RSS = MGK(X[:, 1:], y , 2)
+print("Вектор tetha от главных компонент - ",tetha) 
+print("RSS от главных компонент =", round(RSS,3))
+print("Норма вектора tetha =", round(numpy.linalg.norm([1,1,1,1,1,1,1,1,1] - tetha),3))
