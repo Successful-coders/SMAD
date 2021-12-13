@@ -118,7 +118,7 @@ def findMinEigIndex(vec):
             value = vec[i]
     return minIndex
 
-def MGK(X,Y, numberOfEigsToDelete):
+def MGK(X, Y, numberOfEigsToDelete):
     #переход к центрированным оценкам
     yavg = sum(Y)/len(Y)
     Ynew = Y
@@ -213,13 +213,13 @@ def main():
     for i in range(n):
         x1[i] = random.uniform(-1, 1)
         x2[i] = random.uniform(-1, 1)
-        x3[i] = random.uniform(-1, 1)
+        x3[i] = x1[i] + x2[i] + np.random.normal(0,0.0001)
         x4[i] = random.uniform(-1, 1)
         x5[i] = random.uniform(-1, 1)
         x6[i] = random.uniform(-1, 1)
-        x7[i] = random.uniform(-1, 1)
+        x7[i] = x5[i] + x6[i] + np.random.normal(0,0.0001)
         x8[i] = random.uniform(-1, 1)
-        x9[i] = 2*x1[i]*x2[i]*x5[i] + x6[i]*10*x3[i]*x4[i] + np.random.normal(0,0.1)
+        x9[i] = random.uniform(-1, 1) 
 
     U = np.zeros(n)
     U = u(x1, x2, x3, x4, x5, x6, x7, x8, x9)
@@ -249,6 +249,6 @@ def main():
     print("Вектор tetha от главных компонент - ",tetha) 
     print("RSS от главных компонент =", round(RSS,3))
     print("Норма вектора tetha =", round(np.linalg.norm([1, 1, 1, 1, 1, 1, 1, 1] - tetha),3))
-    plt.show()
+    # plt.show()
 
 main()
