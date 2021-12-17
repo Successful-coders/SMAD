@@ -2,6 +2,7 @@ import csv
 import numpy as np
 import numpy.linalg as LA
 import math
+import matplotlib.pyplot as plt
 
 def read_value():
     with open('input_rgz.csv', 'r') as csv_file:
@@ -138,7 +139,6 @@ def autokor(X, y, pk, n):
             if dw > 4 - dl:
                 print('DW =', dw, ' - отрицательная автокорреляция')
     p = dw
-    print(p)
 
 
 def mnk_z(Z, c):
@@ -182,6 +182,91 @@ def OMNK(X, p, y):
     pk= ((pk@X.T)@V)@y
     return pk
 
+def kox(reg, n, y):
+    model = np.ones((n))
+    model = np.column_stack((model, reg[0]))
+    model = np.column_stack((model, reg[1]))
+    model = np.column_stack((model, reg[11]))
+    model = np.column_stack((model, reg[12]))
+
+    #оценка через процедуру Кохрейна-Оркатта
+    print('\nОценка параметров лучшей модели процедурой Кохрейна-Оркатта:')
+    p=0
+    while 1:
+        pk = OMNK(X=model, p=p, y)
+        #pk = ((np.linalg.inv(model.T@model))@model.T)@(y)
+        et = y - (pk.T@model.T).T
+        p_prev = p
+        p = ((np.linalg.inv(et[:n-1].T@et[:n-1]))@et[:n-1].T)@(et[1:n])
+        print(p)
+        if np.abs(p_prev - p) < 0.001:
+            break
+    pk= OMNK(X=model, p=p, y)
+    print('p =', p)
+    print('pk = ')
+    print(pk.T)
+
+def dep_X_Y(X, y):
+    reg = {
+        0: X[:, 0], #x1
+        1: X[:, 1], #x2
+        2: X[:, 2], #x3
+        3: X[:, 3], #x4
+        
+        4: X[:, 0] * X[:, 0], #x1x1
+        5: X[:, 0] * X[:, 1], #x1x2
+        6: X[:, 0] * X[:, 2], #x1x3
+        7: X[:, 0] * X[:, 3], #x1x4
+        
+        8:  X[:, 1] * X[:, 1], #x2x2
+        9:  X[:, 1] * X[:, 2], #x2x3
+        10: X[:, 1] * X[:, 3], #x2x4    
+        
+        11: X[:, 2] * X[:, 2], #x3x3
+        12: X[:, 2] * X[:, 3], #x3x4
+
+        13: X[:, 3] * X[:, 3], #x4x4
+        14: X[:, 0] * X[:, 1]* X[:, 2], #x1x2x3
+        15: X[:, 0] * X[:, 1]* X[:, 3], #x1x2x4
+        16: X[:, 0] * X[:, 2]* X[:, 3], #x1x3x4
+        17: X[:, 1] * X[:, 2]* X[:, 3], #x2x3x4
+    }
+    data = {
+        0: 'X1',
+        1: 'X2',
+        2: 'X3',
+        3: 'X4',
+        
+        4: 'X1X1',
+        5: 'X1X2',
+        6: 'X1X3',
+        7: 'X1X4',
+        
+        8:  'X2X2',
+        9:  'X2X3',
+        10: 'X2X4',
+        
+        11: 'X3X3',
+        12: 'X3X4',
+
+        13: 'X4X4',
+        
+        14: 'X1X2X3',
+        15: 'X1X2X4',
+        16: 'X1X3X4',
+        17: 'X2X3X4',
+    }
+
+    
+    # for i in range(0, len(data)):
+    #     p = data[i]
+    #     x = reg[i]
+    #     plt.scatter(reg[i], y)
+    #     plt.title(f'Зависимость Y от {p}')
+    #     plt.xlabel(f'{p}')
+    #     plt.ylabel('y')
+    #     plt.show()
+    return reg
 
 def main():
     x1, x2, x3, x4, y = read_value()
@@ -206,5 +291,7 @@ def main():
     # автокореляция
     pk = OMNK(X, 0, y)
     autokor(X, y, pk, len(X))
+    reg = dep_X_Y(X, y)
+    kox(reg, len(X), y)
 
 main()
